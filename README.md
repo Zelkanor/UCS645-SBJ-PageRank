@@ -38,27 +38,28 @@ path from a CPU-emulated GPU stream to the real device kernel in
 `src/pagerank_hybrid_cuda.cu`.
 
 ## Run
-
 ```bash
+cd build
+
 # baselines on the included sample
-./pagerank --mode seq    --input data/sample_graph.txt
-./pagerank --mode omp    --input data/sample_graph.txt
-./pagerank --mode hybrid --input data/sample_graph.txt --hd 5
+./build/pagerank --mode seq    --input ./data/sample_graph.txt
+./build/pagerank --mode omp    --input ./data/sample_graph.txt
+./build/pagerank --mode hybrid --input ./data/sample_graph.txt --hd 5
 
 # CUDA (only if built with `make cuda`)
-./pagerank --mode cuda   --input data/sample_graph.txt
+./build/pagerank --mode cuda   --input ./data/sample_graph.txt
 
 # synthetic power-law graph: 500k vertices, average degree 16
-./pagerank --mode hybrid --synthetic 500000 16 --hd 1 --sample 0.8
+./build/pagerank --mode hybrid --synthetic 500000 16 --hd 1 --sample 0.8
 
 # real SNAP datasets -- download and pass the .txt
 #   https://snap.stanford.edu/data/web-Google.html
 #   https://snap.stanford.edu/data/web-Stanford.html
 #   https://snap.stanford.edu/data/soc-Epinions1.html
-./pagerank --mode hybrid --input web-Google.txt --iters 80
+./build/pagerank --mode hybrid --input ./data/web-Google.txt --iters 80
 ```
 
-Run `./pagerank --help` for the full flag list.
+Run `./build/pagerank --help` for the full flag list.
 
 ### Outputs
 
