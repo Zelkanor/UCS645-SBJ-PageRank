@@ -37,10 +37,19 @@ namespace sbj
         void sbj_gpu_init(uint32_t n, uint64_t m,
                           const uint64_t *row_ptr, const uint32_t *col_idx,
                           const uint32_t *out_deg);
-        void sbj_gpu_upload_rank(const float *r, uint32_t n);
-        void sbj_gpu_step(const int *gpu_vertices, int gpu_count,
-                          float damping, float base,
-                          float *r_in, float *r_out, float *delta_out);
+
+        // --- NEW ASYNC SHIM ---
+        // 1. Queue the upload of the rank array to the GPU
+        void sbj_gpu_upload_rank_async(const float *r, uint32_t n);
+
+        // 2. Queue the compute kernels and the download back to pinned host memory
+        void sbj_gpu_step_async(const int *gpu_vertices, int gpu_count,
+                                float damping, float base);
+
+        // 3. Synchronize the stream, wait for completion, and scatter the results
+        void sbj_gpu_sync_and_gather(const int *gpu_vertices, int gpu_count,
+                                     float *r_out, float *delta_out);
+
         void sbj_gpu_destroy();
     }
 #endif
@@ -126,7 +135,7 @@ namespace sbj
         std::printf("[hybrid] |V|=%u  cpu_set=%zu (heavy)  gpu_set=%zu\n",
                     n, part.cpu_v.size(), part.gpu_v.size());
 #ifdef SBJ_WITH_CUDA
-        std::printf("[hybrid] GPU backend: ENABLED (CUDA)\n");
+        std::printf("[hybrid] GPU backend: ENABLED (CUDA ASYNC)\n");
 #else
         std::printf("[hybrid] GPU backend: DISABLED (CPU fallback)\n");
 #endif
@@ -197,12 +206,18 @@ namespace sbj
             double delta_cpu = 0.0, delta_gpu = 0.0;
 
 #ifdef SBJ_WITH_CUDA
-            // overlap: launch GPU side, sweep CPU side, then collect
             float gpu_delta_f = 0.0f;
-            sbj_gpu_upload_rank(r.data(), n);
-            sbj_gpu_step(gpu_active->data(), (int)gpu_active->size(),
-                         d, base, r.data(), r_new.data(), &gpu_delta_f);
+
+            // 1. Kick off GPU transfers and computation asynchronously
+            sbj_gpu_upload_rank_async(r.data(), n);
+            sbj_gpu_step_async(gpu_active->data(), (int)gpu_active->size(), d, base);
+
+            // 2. WHILE the GPU is busy, the CPU processes the heavy hubs! (Total Overlap)
             delta_cpu = sweep(g, part.cpu_v, contrib, r, r_new, d, base);
+
+            // 3. Wait for GPU stream to finish and gather results
+            sbj_gpu_sync_and_gather(gpu_active->data(), (int)gpu_active->size(), r_new.data(), &gpu_delta_f);
+
             delta_gpu = gpu_delta_f;
 #else
 // CPU-only fallback: split into two OpenMP regions to mimic two

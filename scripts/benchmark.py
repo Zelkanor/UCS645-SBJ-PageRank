@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
-"""Benchmark PageRank on real datasets and save results to CSV."""
+"""Benchmark PageRank on real datasets and save results to CSV.
+Includes a parameter sweep for the Hybrid mode's high-degree (hd) percentile.
+"""
 
 import argparse
 import csv
@@ -10,29 +12,28 @@ import sys
 import time
 
 # Real datasets (name only for internal logging)
-
 DATASETS = [
-("web-Google", "data/web-Google.txt"),
-("soc-Epinions", "data/soc-Epinions1.txt"),
-("soc-LiveJournal", "data/soc-LiveJournal1.txt"),
+    ("web-Google", "data/web-Google.txt"),
+    ("soc-Epinions", "data/soc-Epinions1.txt"),
+    ("soc-LiveJournal", "data/soc-LiveJournal1.txt"),
 ]
 
-MODES = ["seq", "omp", "hybrid"]  # add "cuda" if needed
-
 # Parse output
-
 PAT = re.compile(r"iters=(\d+).*?delta=([\d.eE+-]+).*?time=([\d.]+)s")
 GRAPH_PAT = re.compile(r"\|V\|=(\d+).*?\|E\|=(\d+)")
 
-def run_once(binary, mode, dataset_path, iters=60, sample=1.0, hd=1):
+def run_once(binary, mode, dataset_path, iters=100, sample=1.0, hd=1):
     cmd = [
         binary,
         "--mode", mode,
         "--input", dataset_path,
         "--iters", str(iters),
-        "--sample", str(sample),
-        "--hd", str(hd)
+        "--sample", str(sample)
     ]
+    
+    # Only append the hd flag if we are running in hybrid mode
+    if mode == "hybrid":
+        cmd.extend(["--hd", str(hd)])
 
     t0 = time.time()
     p = subprocess.run(cmd, capture_output=True, text=True)
@@ -66,11 +67,11 @@ def run_once(binary, mode, dataset_path, iters=60, sample=1.0, hd=1):
         "avg_deg": avg_deg
     }
 
-def run_avg(binary, mode, dataset_path, trials=3):
+def run_avg(binary, mode, dataset_path, trials=3, hd=1):
     results = []
 
     for _ in range(trials):
-        r = run_once(binary, mode, dataset_path)
+        r = run_once(binary, mode, dataset_path, hd=hd)
         if r:
             results.append(r)
 
@@ -95,9 +96,13 @@ def main():
     ap.add_argument("--with-cuda", action="store_true")
     args = ap.parse_args()
 
-    modes = list(MODES)
+    # Define the baseline modes and optionally append cuda if compiled with it
+    modes_baseline = ["seq", "omp"]
     if args.with_cuda:
-        modes.append("cuda")
+        modes_baseline.append("cuda")
+        
+    # Define the different HD percentiles to test for hybrid mode
+    hybrid_hds = [0.05, 0.1, 0.2, 0.5, 1.0]
 
     os.makedirs(os.path.dirname(args.out), exist_ok=True)
 
@@ -106,26 +111,35 @@ def main():
     for name, path in DATASETS:
         print(f"\n=== Dataset: {name} ===")
 
-        results_by_mode = {}
+        results_by_run = {}
 
-        # Run all modes
-        for mode in modes:
+        # 1. Run Baselines
+        for mode in modes_baseline:
             r = run_avg(args.bin, mode, path, trials=args.trials)
             if r:
-                results_by_mode[mode] = r
+                results_by_run[(mode, "N/A")] = r
 
-        seq_time = results_by_mode.get("seq", {}).get("seconds", None)
+        # 2. Run Hybrid Sweep
+        for hd in hybrid_hds:
+            r = run_avg(args.bin, "hybrid", path, trials=args.trials, hd=hd)
+            if r:
+                results_by_run[("hybrid", hd)] = r
 
-        # Store results
-        for mode, r in results_by_mode.items():
+        seq_time = results_by_run.get(("seq", "N/A"), {}).get("seconds", None)
+
+        # 3. Process and Store Results
+        for (mode, hd), r in results_by_run.items():
             speedup = (seq_time / r["seconds"]) if seq_time and mode != "seq" else 1.0
 
-            print(f"{mode:>6}  n={r['n']:>8}  iters={r['iters']:>3}  "
+            # Formatting for standard output
+            hd_str = f"hd={hd}" if mode == "hybrid" else ""
+            print(f"{mode:>6} {hd_str:>6}  n={r['n']:>8}  iters={r['iters']:>3}  "
                   f"t={r['seconds']:.4f}s  speedup={speedup:.2f}x")
 
             rows.append({
                 "dataset": name,
                 "mode": mode,
+                "hd": hd,
                 "n": r["n"],
                 "avg_deg": round(r["avg_deg"], 2),
                 "edges": r["edges"],
@@ -138,7 +152,7 @@ def main():
     with open(args.out, "w", newline="") as f:
         writer = csv.DictWriter(
             f,
-            fieldnames=["dataset", "mode", "n", "avg_deg", "edges", "iters", "seconds", "speedup"]
+            fieldnames=["dataset", "mode", "hd", "n", "avg_deg", "edges", "iters", "seconds", "speedup"]
         )
         writer.writeheader()
         writer.writerows(rows)
@@ -147,4 +161,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
