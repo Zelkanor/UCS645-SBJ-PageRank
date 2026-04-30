@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Render speedup + runtime charts from results/bench.csv."""
+from operator import lt
 import argparse, csv, os, sys
-
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--in",  dest="src", default="results/bench.csv")
@@ -25,30 +25,60 @@ def main():
 
     # runtime
     plt.figure(figsize=(7,4))
+
     for m in modes:
-        xs, ys = [], []
-        for s in sizes:
-            for r in rows:
-                if r["mode"] == m and int(r["edges"]) == s:
-                    xs.append(s); ys.append(float(r["seconds"]))
+        data = [(int(r["edges"]), float(r["seconds"])) for r in rows if r["mode"] == m]
+        data.sort()  # 🔥 important
+
+        xs = [x for x, _ in data]
+        ys = [y for _, y in data]
+
         plt.plot(xs, ys, marker="o", label=m)
-    plt.xlabel("edges"); plt.ylabel("seconds"); plt.title("PageRank runtime")
-    plt.xscale("log"); plt.yscale("log"); plt.grid(True, ls=":"); plt.legend()
-    plt.tight_layout(); plt.savefig(os.path.join(args.dst, "runtime.png"), dpi=140)
+
+    plt.xlabel("Number of Edges")
+    plt.ylabel("Execution Time (seconds)")
+    plt.title("PageRank Runtime")
+
+
+    plt.xticks(xs, rotation=30)
+    plt.grid(True, linestyle=":")
+
+
+    #plt.xscale("log")
+    #plt.yscale("log")
+
+    plt.legend()
+    plt.tight_layout()
+    plt.savefig(os.path.join(args.dst, "runtime.png"), dpi=140)
 
     # speedup vs sequential
     plt.figure(figsize=(7,4))
+
     for m in modes:
-        if m == "seq": continue
-        xs, ys = [], []
-        for s in sizes:
-            for r in rows:
-                if r["mode"] == m and int(r["edges"]) == s:
-                    xs.append(s); ys.append(float(r["speedup"]))
+        if m == "seq":
+            continue
+
+        data = [(int(r["edges"]), float(r["speedup"])) for r in rows if r["mode"] == m]
+        data.sort()
+
+        xs = [x for x, _ in data]
+        ys = [y for _, y in data]
+
         plt.plot(xs, ys, marker="s", label=m)
-    plt.xlabel("edges"); plt.ylabel("speedup vs sequential"); plt.title("Speedup")
-    plt.xscale("log"); plt.grid(True, ls=":"); plt.legend()
-    plt.tight_layout(); plt.savefig(os.path.join(args.dst, "speedup.png"), dpi=140)
+
+    plt.xlabel("Number of Edges")
+    plt.ylabel("Speedup vs Sequential")
+    plt.title("Speedup Comparison")
+
+    plt.xticks(xs, rotation=30)
+    plt.grid(True, linestyle=":")
+
+
+    #plt.xscale("log")
+
+    plt.legend()
+    plt.tight_layout()
+    plt.savefig(os.path.join(args.dst, "speedup.png"), dpi=140)
 
     print("wrote", os.path.join(args.dst, "runtime.png"),
           "and", os.path.join(args.dst, "speedup.png"))
