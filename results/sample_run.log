@@ -1,0 +1,26 @@
+===== sample_run.log =====
+$ ./pagerank --mode seq --input data/sample_graph.txt
+[load] data/sample_graph.txt
+graph: |V|=12  |E|=27  avg_deg=2.25  max_in=5  max_out=3  dangling=0
+[seq] iters=29  delta=9.332e-07  converged=yes  time=0.0000s
+top-5: (0, 1.8225e-01) (9, 1.7081e-01) (3, 1.3601e-01) (11, 8.5095e-02) (5, 8.3048e-02) 
+
+$ ./pagerank --mode omp --input data/sample_graph.txt
+[load] data/sample_graph.txt
+graph: |V|=12  |E|=27  avg_deg=2.25  max_in=5  max_out=3  dangling=0
+[omp] iters=29  delta=9.332e-07  converged=yes  time=0.0002s
+top-5: (0, 1.8225e-01) (9, 1.7081e-01) (3, 1.3601e-01) (11, 8.5095e-02) (5, 8.3048e-02) 
+
+$ ./pagerank --mode hybrid --input data/sample_graph.txt --hd 5
+[load] data/sample_graph.txt
+graph: |V|=12  |E|=27  avg_deg=2.25  max_in=5  max_out=3  dangling=0
+[hybrid] |V|=12  cpu_set=1 (heavy)  gpu_set=11
+[hybrid] iters=29  delta=9.332e-07  converged=yes  time=0.0003s
+top-5: (0, 1.8225e-01) (9, 1.7081e-01) (3, 1.3601e-01) (11, 8.5095e-02) (5, 8.3048e-02) 
+
+$ ./pagerank --mode hybrid --synthetic 200000 12 --hd 1 --sample 0.8
+[gen] power-law n=200000 avg_deg=12 seed=42
+graph: |V|=200000  |E|=2399988  avg_deg=12.00  max_in=2793  max_out=12  dangling=0
+[hybrid] |V|=200000  cpu_set=2000 (heavy)  gpu_set=198000
+[hybrid] iters=69  delta=6.594e-07  converged=yes  time=0.6599s
+top-5: (10, 3.5686e-02) (0, 3.5541e-02) (1, 3.4991e-02) (7, 3.4959e-02) (8, 3.4291e-02) 
